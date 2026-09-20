@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>校友地图</title>
+<style>html,body,#map{margin:0;width:100%;height:100%;font-family:system-ui,sans-serif}button{display:block;border:0;background:transparent;color:#246c81;cursor:pointer;padding:.4rem 0;text-align:left}.cluster{position:relative;display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding:0;border:1px solid #43b9a5;border-radius:50%;background:radial-gradient(circle,#bcffeb 0%,#66d5be 48%,#278b7970 76%,#278b7910);color:#073d34;font-size:16px;font-weight:800;transition:filter .15s;outline-offset:5px}.cluster:hover,.cluster:focus-visible,.cluster[aria-pressed=true]{filter:brightness(1.12);outline:3px solid #175d51}.cluster-label{position:absolute;top:calc(100% + 6px);left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:600;padding:2px 6px;background:#fffffff0;border-radius:5px;color:#254d44;box-shadow:0 1px 4px #0002}.zoom-controls{position:absolute;top:14px;left:14px;z-index:200;display:flex;flex-direction:column;background:white;border:1px solid #d3e1dc;border-radius:10px;overflow:hidden;box-shadow:0 3px 14px #0002}.zoom-controls button{width:38px;height:38px;font-size:23px;font-weight:500;text-align:center;padding:0;margin:0;color:#205b4c}.zoom-controls button+button{border-top:1px solid #e1e9e6}
+:root{color-scheme:light;--map-bg:#f5f6f4;--surface:#fffffff0;--ink:#254d44;--border:#d3e1dc;--accent:#175d51}
+:root[data-theme=dark]{color-scheme:dark;--map-bg:#202b32;--surface:#263c40f5;--ink:#daf4e9;--border:#526c68;--accent:#a2efdb}
+html,body,#map,.amap-container{background:var(--map-bg)!important}
+.cluster-label,.zoom-controls{background:var(--surface);color:var(--ink);border-color:var(--border)}
+.zoom-controls button{color:var(--ink)}.zoom-controls button+button{border-color:var(--border)}
+.cluster:hover,.cluster:focus-visible,.cluster[aria-pressed=true]{outline-color:var(--accent)}
+/* Raster tiles only: keep halo markers, controls and the provider attribution intact. */
+:root[data-theme=dark] img[data-alumni-base-tile]{filter:invert(.88) hue-rotate(165deg) saturate(.55) brightness(.85)}
+:root[data-theme=dark] .amap-logo{background:#ffffffe8;border-radius:3px}
+:root[data-theme=dark] .amap-copyright{background:#ffffffe8;border-radius:3px;color:#111!important}
+</style></head>
+<body><div id="map"></div><div class="zoom-controls"><button id="zoom-in" type="button" aria-label="放大地图">+</button><button id="zoom-out" type="button" aria-label="缩小地图">−</button></div><script>
+// This document is deliberately sandboxed without allow-same-origin.
+let started=false,selected=null;
+const setTheme=value=>{document.documentElement.dataset.theme=value==='dark'?'dark':'light'};
+const setSelection=key=>{selected=key;document.querySelectorAll('.cluster').forEach(el=>el.setAttribute('aria-pressed',String(el.dataset.regionKey===key)))};
+window.addEventListener('message',event=>{
+  if(event.source!==parent)return;
+  if(event.data?.type==='alumni-map-theme')setTheme(event.data.theme);
+  if(event.data?.type==='alumni-map-selection')setSelection(event.data.key);
+});
+window.addEventListener('message',function(event){
+  if(event.source!==parent||event.data?.type!=='alumni-map-init'||started)return;
+  started=true;
+  setTheme(event.data.theme);setSelection(event.data.selected);
+  const data=event.data.data;
+  const reply=(type,extra={})=>parent.postMessage({type,...extra},event.origin);
+  // The vector/WebGL path cannot render reliably in this opaque-origin
+  // sandbox. Use SDK 2.0's image-tile renderer on every browser, including GPUs.
+  // Keep these SDK renderer switches under the real-WebGL regression test.
+  window.forbidenWebGL=true;
+  window.forceWebGL=false;
+  window.forceWebGLBaseRender=false;
+  window._AMapSecurityConfig={securityJsCode:data.security};
+  const timeout=setTimeout(()=>reply('alumni-map-error'),25000);
+  let tileCheck;
+  const script=document.createElement('script');
+  script.src='https://webapi.amap.com/maps?v=2.0&key='+encodeURIComponent(data.key);
+  script.onerror=()=>{clearTimeout(timeout);reply('alumni-map-error')};
+  script.onload=()=>{
+    try {
+      // SDK 2.0's default resize sensor writes into a nested iframe, which
+      // opaque-origin sandboxes correctly reject. Its built-in DOM sensor
+      // observes the same sizes without requiring cross-frame access.
+      if(!AMap.DomUtil?.watchSize2)throw new Error('Map resize adapter unavailable');
+      const domSensor=AMap.DomUtil.watchSize2;
+      AMap.DomUtil.watchSize=(element,callback,state)=>{
+        let width,height;
+        const changed=(w,h)=>{width=w;height=h;callback(w,h)};
+        let cleanup=domSensor(element,changed,state);
+        // Some browsers do not fire the SDK's hidden scroll sensors when an
+        // iframe shrinks. Refresh that sensor with ResizeObserver as a fallback.
+        const observer=new ResizeObserver(()=>{
+          if(element.offsetWidth!==width||element.offsetHeight!==height){
+            cleanup();cleanup=domSensor(element,changed,state);
+          }
+        });
+        observer.observe(element);
+        return ()=>{observer.disconnect();cleanup()};
+      };
+      const map=new AMap.Map('map',{zoom:4,center:[104.06,30.57],viewMode:'2D',resizeEnable:true});
+      const updateSize=()=>{document.documentElement.dataset.mapWidth=map.getSize().getWidth()};
+      map.on('resize',updateSize);
+      window.addEventListener('resize',()=>requestAnimationFrame(()=>requestAnimationFrame(updateSize))); 
+      // Tag the SDK's raster images as they arrive; never filter the marker layer.
+      const tagTiles=()=>document.querySelectorAll('.amap-layers img').forEach(img=>{
+        if(img.naturalWidth>=128&&img.naturalHeight>=128)img.setAttribute('data-alumni-base-tile','true');
+      });
+      document.getElementById('map').addEventListener('load',tagTiles,true);
+      // Cached images can finish loading before the SDK attaches them.
+      new MutationObserver(tagTiles).observe(document.getElementById('map'),{childList:true,subtree:true});
+      // SDK `complete` can fire with markers over an empty WebGL canvas.
+      // Only acknowledge real, visible, decoded base-map tile images.
+      const checkTiles=()=>{
+        tagTiles();
+        const count=Array.from(document.querySelectorAll('.amap-layers img')).filter(img=>{
+          const r=img.getBoundingClientRect();
+          return img.complete&&img.naturalWidth>=128&&img.naturalHeight>=128&&r.right>0&&r.bottom>0&&r.left<innerWidth&&r.top<innerHeight;
+        }).length;
+        if(count>=2){
+          updateSize();clearTimeout(timeout);clearInterval(tileCheck);
+          document.documentElement.dataset.loadedTiles=count;
+          reply('alumni-map-loaded',{tiles:count});
+        }
+      };
+      map.on('complete',checkTiles);
+      tileCheck=setInterval(checkTiles,700);
+      document.getElementById('zoom-in').onclick=()=>map.zoomIn();
+      document.getElementById('zoom-out').onclick=()=>map.zoomOut();
+      let markers=[],level;
+      const paint=()=>{
+        const next=map.getZoom()<7?'province':'city';
+        if(next!==level&&level){selected=null;reply('alumni-map-clear')}
+        level=next;
+        map.remove(markers);markers=[];
+        for(const region of data.regions[level]){
+          if(region.lat==null||region.lng==null)continue;
+          const size=Math.min(88,30+Math.sqrt(region.count)*7);
+          const glow=Math.min(36,8+Math.sqrt(region.count)*3);
+          const button=document.createElement('button');
+          button.className='cluster';button.type='button';button.dataset.regionKey=region.key;button.dataset.count=region.count;
+          button.style.width=button.style.height=size+'px';
+          button.style.boxShadow='0 0 '+glow+'px '+Math.round(glow/4)+'px #4abfa665';
+          button.textContent=region.count;
+          button.title=region.label+' · '+region.count+' 位校友';
+          button.setAttribute('aria-label',button.title);button.setAttribute('aria-pressed',String(selected===region.key));
+          const label=document.createElement('span');label.className='cluster-label';label.textContent=region.label.split(' · ').slice(-1)[0];button.appendChild(label);
+          button.onclick=()=>{
+            selected=region.key;
+            document.querySelectorAll('.cluster').forEach(el=>el.setAttribute('aria-pressed',String(el===button)));
+            reply('alumni-map-region',{key:region.key});
+          };
+          const marker=new AMap.Marker({position:[region.lng,region.lat],content:button,anchor:'center',zIndex:100+Math.min(region.count,100)});
+          map.add(marker);markers.push(marker);
+        }
+        document.documentElement.dataset.clusterLevel=level;
+      };
+      map.on('zoomend',paint);paint();
+    }catch(error){clearInterval(tileCheck);document.documentElement.dataset.mapError=String(error);clearTimeout(timeout);reply('alumni-map-error')}
+  };
+  document.head.appendChild(script);
+});
+</script></body></html>

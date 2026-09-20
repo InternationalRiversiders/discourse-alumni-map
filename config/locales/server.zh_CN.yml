@@ -1,0 +1,10 @@
+zh_CN:
+  site_settings:
+    alumni_map_sidebar_section_title: "侧栏共用功能分组名称（显示在类别上方）"
+    alumni_map_enabled: "启用校友地图"
+    alumni_map_read_only: "只读展示校友地图，禁止修改名片及管理操作（用于快照预览）"
+    alumni_map_allowed_groups: "允许使用校友地图的用户组（管理员始终可用）"
+    alumni_map_admin_groups: "允许管理校友地图的用户组"
+    alumni_map_amap_key: "高德 Web JS API Key（须配置论坛域名白名单）"
+    alumni_map_amap_security_code: "高德 JS 安全码（SDK 需要向授权浏览器下发）"
+    alumni_map_server_key: "高德服务端地理编码 Key"

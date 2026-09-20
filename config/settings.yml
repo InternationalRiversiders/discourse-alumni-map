@@ -1,0 +1,23 @@
+plugins:
+  alumni_map_enabled:
+    default: false
+    client: true
+  alumni_map_sidebar_section_title:
+    default: "校园生活"
+    client: true
+  alumni_map_read_only:
+    default: false
+  alumni_map_allowed_groups:
+    default: ""
+    type: group_list
+  alumni_map_admin_groups:
+    default: ""
+    type: group_list
+  alumni_map_amap_key:
+    default: ""
+  alumni_map_amap_security_code:
+    default: ""
+    secret: true
+  alumni_map_server_key:
+    default: ""
+    secret: true
