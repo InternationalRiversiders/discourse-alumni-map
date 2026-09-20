@@ -64,7 +64,7 @@ window.addEventListener('message',function(event){
       const map=new AMap.Map('map',{zoom:4,center:[104.06,30.57],viewMode:'2D',resizeEnable:true});
       const updateSize=()=>{document.documentElement.dataset.mapWidth=map.getSize().getWidth()};
       map.on('resize',updateSize);
-      window.addEventListener('resize',()=>requestAnimationFrame(()=>requestAnimationFrame(updateSize))); 
+      window.addEventListener('resize',()=>requestAnimationFrame(()=>requestAnimationFrame(updateSize)));
       // Tag the SDK's raster images as they arrive; never filter the marker layer.
       const tagTiles=()=>document.querySelectorAll('.amap-layers img').forEach(img=>{
         if(img.naturalWidth>=128&&img.naturalHeight>=128)img.setAttribute('data-alumni-base-tile','true');
