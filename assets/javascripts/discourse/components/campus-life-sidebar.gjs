@@ -15,12 +15,12 @@ export default class extends Component {
     const u = this.currentUser;
     const s = this.siteSettings;
     const entries = [
+      [s.food_enabled, "food", "觅电", "utensils", "food"],
       [s.alumni_map_enabled && u?.alumni_map_member, "alumni-map", "校友地图", "map-location-dot", "alumni-map"],
       [s.rsc_enabled && s.rsc_native_trial_enabled && (u?.rsc_member || u?.rsc_admin), "rsc", "RSC", "coins", u?.rsc_member ? "rsc.index" : "rsc.admin"],
       [s.courses_enabled && u?.courses_member, "courses", "选课指南", "graduation-cap", "courses"],
       [s.rsdate_enabled && u?.rsdate_member, "rsdate", "RSDate", "heart", "rsdate"],
       [s.whisper_enabled && u?.whisper_member, "whisper", "树洞", "leaf", "whisper"],
-      [s.food_enabled, "food", "觅电", "utensils", "food"],
     ];
     return entries.filter(([visible]) => visible).map(([,name,text,icon,route]) => ({name,text,icon,route}));
   }
