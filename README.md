@@ -1,6 +1,6 @@
 # 校友地图 · Discourse 原生插件
 
-首版试迁移，2026-09-20。后端使用论坛 Rails/PostgreSQL/Sidekiq，前端使用原生 Glimmer 页面。入口 `/alumni-map`，不需要运行原来的 Next.js 服务。
+已完成正式迁移，入口 [river-side.cc/alumni-map](https://river-side.cc/alumni-map)。后端使用论坛 Rails/PostgreSQL/Sidekiq，前端使用原生 Glimmer 页面。入口 `/alumni-map`，不需要运行原来的 Next.js 服务。
 
 ## 安装与配置
 
@@ -17,7 +17,7 @@
 
 `script/export_legacy.mjs` 只读导出旧库；`script/import_legacy.rb` 默认事务回滚演练，正式导入需要插件关闭、业务表为空和已核对的 SHA256。不能直接把旧 Prisma migration 放入论坛运行。
 
-详细功能、迁移命令、行为差异与尚未实现项见 [实施说明](docs/implementation.md)。隔离测试入口见 [集成验收](../discourse-community-test/README.md)。**真实数据已导入隔离的私有测试站，未切换线上入口。** 161 张名片逐条核对通过，其中 123 张公开、38 张未公开。访问入口、验收和剩余差异见 [私有试迁移记录](docs/private-migration-2026-09-20.md)。
+详细功能、迁移命令、行为差异与尚未实现项见 [实施说明](docs/implementation.md)。隔离测试入口见 [集成验收](../discourse-community-test/README.md)。**真实数据已完成正式导入，旧 map.river-side.cc 保留跳转；下述私有试迁移记录是历史验收记录。** 161 张名片逐条核对通过，其中 123 张公开、38 张未公开。访问入口、验收和剩余差异见 [私有试迁移记录](docs/private-migration-2026-09-20.md)。
 
 真实快照启用 `alumni_map_read_only`，禁止编辑与管理；合成数据演示站允许测试名片修改和公开设置。高德地图需配置 `alumni_map_amap_key` 与 `alumni_map_amap_security_code`；城市自动查询另需服务端 Key。已接入论坛用户删除、匿名化、合并处理，并提供本人的名片数据下载。
 
@@ -27,4 +27,6 @@
 
 插件在“类别”上方提供原生可折叠的“校园生活”分组，使用 `alumni_map_sidebar_section_title` 修改名称。只显示已启用且当前用户有访问权限的原生应用入口；其他应用未安装时不会出现占位链接。桌面和手机共用同样的逻辑，展开状态由论坛记忆。
 
-其他 Riverside 原生插件迁入时，应停止重复注册各自的侧栏分组。当前配套源代码已增加该判断；这不代表那些应用已经切换到生产。
+其他 Riverside 原生插件迁入时，应停止重复注册各自的侧栏分组。当前配套源代码已增加该判断；校友地图、选课指南、RSDate、树洞和觅电现均已正式上线；觅电位于分组第一位。
+
+最终功能复核与有意保留的差异见 [最终复核](docs/final-review.md)。
