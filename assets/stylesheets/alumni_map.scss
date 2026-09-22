@@ -869,3 +869,11 @@
 .river-alumni_map .alumni-location { width: 100%; }
 .river-alumni_map .alumni-location select { width: 100%; min-width: 0; }
 .river-alumni_map .alumni-pagination { display: flex; align-items: center; gap: 1rem; justify-content: center; margin: 1.5rem 0; }
+
+// Forum identity links use Discourse's avatar and native user card.
+.alumni_map-forum-user {
+  display: inline-flex; align-items: center; gap: .4em; max-width: 100%;
+  vertical-align: middle; color: var(--primary); font-weight: 600;
+  .avatar { width: 24px; height: 24px; flex: 0 0 24px; border-radius: 50%; }
+  > span { min-width: 0; overflow-wrap: anywhere; }
+}

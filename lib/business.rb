@@ -29,14 +29,14 @@ module DiscourseAlumniMap
         pages=[(scope.count/50.0).ceil,1].max
         page=[[query['page'].to_i,1].max,pages].min
         profiles=scope.order(updated_at: :desc,id: :desc).offset((page-1)*50).limit(50).to_a
-        usernames=User.where(id:profiles.map(&:user_id)).pluck(:id,:username).to_h
+        usernames=User.where(id:profiles.map(&:user_id)).index_by(&:id)
         out[:filters]=[{name:'q',label:'查找名片或论坛账号',value:q,placeholder:'昵称、用户名或地区'}]
         out[:pagination]={page:page,pages:pages,previous:page>1 ? {view:'admin',q:q,page:page-1} : nil,next:page<pages ? {view:'admin',q:q,page:page+1} : nil}
         out[:cards]=profiles.map do |p|
-          username=usernames[p.user_id]
+          account=usernames[p.user_id];username=account&.username
           publication=p.status=='hidden' ? '已隐藏' : p.published ? '已公开' : '未公开'
           Ui.card(p.id,p.nickname,[p.country,p.province,p.city,p.details['company'],p.hidden_reason.presence && "处理原因：#{p.hidden_reason}"].reject(&:blank?).join(' · '),
-            tag:publication,subtitle:username,profile_url:username && "/u/#{ERB::Util.url_encode(username)}",
+            tag:publication,subtitle:username,forum_user:account && Shared.forum_user(account),profile_url:username && "/u/#{ERB::Util.url_encode(username)}",
             forms:[Ui.form('管理名片','moderate',[Ui.field('status','处理方式',p.status=='hidden' ? 'visible' : 'hidden',type:'select',options:[['hidden','隐藏'],['visible','解除隐藏（由本人重新公开）']]),Ui.field('reason','理由',nil,required:true)],{'id'=>p.id},button:'确认')])
         end
         out[:note]="共 #{scope.count} 张名片。解除隐藏不会代替本人公开资料。"
@@ -45,14 +45,14 @@ module DiscourseAlumniMap
         q=query['q'].to_s.strip
         scope=scope.where('nickname ILIKE :q OR city ILIKE :q OR country ILIKE :q OR province ILIKE :q',q:"%#{ActiveRecord::Base.sanitize_sql_like(q)}%") if q.present?
         profiles=scope.order(updated_at: :desc,id: :desc).to_a
-        usernames=User.where(id:profiles.select(&:show_username).map(&:user_id)).pluck(:id,:username).to_h
+        usernames=User.where(id:profiles.select(&:show_username).map(&:user_id)).index_by(&:id)
         out[:filters]=[{name:'q',label:'寻找校友',value:q,placeholder:'昵称、国家或城市'}]
         out[:stats]=[{label:'公开名片',value:profiles.size},{label:'国内省份',value:profiles.select { |p| p.country=='中国' }.map(&:province).reject(&:blank?).uniq.size},{label:'国家 / 地区',value:profiles.map(&:country).reject(&:blank?).uniq.size}]
         out[:map]={key:SiteSetting.alumni_map_amap_key,security:SiteSetting.alumni_map_amap_security_code,points:profiles.filter_map { |p| {id:p.id,lat:p.latitude.to_f,lng:p.longitude.to_f,title:p.nickname,city:p.city} if p.latitude && p.longitude },regions:{province:regions(profiles,'province'),city:regions(profiles,'city')}}
         out[:cards]=profiles.map do |p|
           d=p.details
-          username=p.show_username ? usernames[p.user_id] : nil
-          Ui.card(p.id,p.nickname,d['bio'],tag:[p.country,p.province,p.city].reject(&:blank?).uniq.join(' · '),subtitle:username,profile_url:username && "/u/#{ERB::Util.url_encode(username)}",profile_fields:DETAILS.filter_map { |key,label| {label:label,value:d[key]} if key!='bio' && d[key].present? })
+          account=p.show_username ? usernames[p.user_id] : nil;username=account&.username
+          Ui.card(p.id,p.nickname,d['bio'],tag:[p.country,p.province,p.city].reject(&:blank?).uniq.join(' · '),subtitle:username,forum_user:account && Shared.forum_user(account),profile_url:username && "/u/#{ERB::Util.url_encode(username)}",profile_fields:DETAILS.filter_map { |key,label| {label:label,value:d[key]} if key!='bio' && d[key].present? })
         end
         out[:note]='仅显示城市级位置。点击地区查看校友；未填写坐标的名片也可通过地区选择查看。'
         if q.present? && profiles.empty?
