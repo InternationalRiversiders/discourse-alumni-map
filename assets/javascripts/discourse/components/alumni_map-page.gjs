@@ -154,38 +154,13 @@ export default class extends Component {
   get activeFilters() {
     return this.extraFilters.some((field) => Boolean(field.value));
   }
-  get showAction() {
-    return (
-      this.data.member && this.data.view !== "me" && this.data.view !== "admin"
-    );
-  }
-  @action primaryAction(event) {
-    return this.navigate({ view: "me" }, event);
-  }
   <template>
     <main
       class="river-app river-alumni_map"
       data-view={{this.data.view}}
       aria-busy={{this.busy}}
     >
-      <header class="river-hero">
-        <div class="river-hero-copy"><span class="river-eyebrow"><span
-              class="river-brand-dot"
-            ></span>RIVERSIDE / ALUMNI</span><h1>{{this.data.title}}</h1><p
-          >{{this.data.intro}}</p>
-          {{#if this.showAction}}<button
-              class="river-hero-action"
-              type="button"
-              disabled={{this.busy}}
-              {{on "click" this.primaryAction}}
-            >我的名片<AppIcon @kind="arrow" /></button>{{/if}}
-        </div>
-        <div class="river-hero-art" aria-hidden="true"><span
-            class="river-orbit"
-          ></span><span class="river-art-tile"><AppIcon
-              @kind="map"
-            /></span><span class="river-art-dot"></span></div>
-      </header>
+      <h1 class="sr-only">{{this.data.title}}</h1>
       <nav class="river-tabs" aria-label="功能导航">{{#each
           this.data.tabs key="id"
           as |tab|
