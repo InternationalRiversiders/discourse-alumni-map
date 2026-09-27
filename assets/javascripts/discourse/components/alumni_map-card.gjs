@@ -20,7 +20,7 @@ export default class extends Component {
         <div class="river-card-heading-text">{{#if @card.tag}}<span
               class="river-tag"
             >{{@card.tag}}</span>{{/if}}
-          <h2>{{@card.title}}</h2>{{#if @card.subtitle}}<p
+          <h2><ForumUser @user={{@card.forum_user}} @name={{@card.title}} @hideAvatar={{true}} /></h2>{{#if @card.subtitle}}<p
               class="river-meta"
             ><ForumUser @user={{@card.forum_user}} @name={{@card.subtitle}} @hideAvatar={{true}} /></p>{{/if}}
         </div>
