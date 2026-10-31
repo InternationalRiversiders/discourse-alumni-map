@@ -12,6 +12,7 @@ require_relative "lib/engine"
 
 after_initialize do
   require_relative "lib/core"
+  require_relative "lib/notifications"
   require_relative "lib/locations"
   require_relative "lib/business"
   require_relative "lib/importer"

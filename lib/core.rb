@@ -42,7 +42,7 @@ module DiscourseAlumniMap
       ActiveRecord::Base.connection.execute("SELECT pg_advisory_xact_lock(#{number})")
     end
     def self.command(user, operation, data, key)
-      Access.check!(user)
+      Access.check!(user, admin: %w[moderate].include?(operation))
       raise Error, "这是只读快照，请到演示站测试编辑" if SiteSetting.alumni_map_read_only
       raise Error, "请求编号缺失" unless key.to_s.match?(/\A[\w-]{8,100}\z/)
       fingerprint = Digest::SHA256.hexdigest([operation, data.to_h.deep_sort.to_json].join(":")) if data.respond_to?(:deep_sort)
@@ -74,20 +74,7 @@ module DiscourseAlumniMap
       return unless user_id && User.exists?(user_id)
       Event.create_or_find_by!(key: key) { |e| e.user_id = user_id; e.text = text; e.path = path }
     end
-    def self.deliver
-      return unless SiteSetting.alumni_map_enabled
-      Event.where(notification_id: nil).order(:id).limit(100).each do |event|
-        event.with_lock do
-          next if event.notification_id
-          next unless User.exists?(event.user_id)
-          n = Notification.create!(user_id: event.user_id, notification_type: Notification.types[:custom], skip_send_email: true,
-            data: { river_app: "alumni_map", river_text: event.text, river_path: event.path, river_icon: "map-location-dot", message: "alumni_map", display_username: "", topic_title: event.text }.to_json)
-          event.update!(notification_id: n.id)
-        end
-      rescue => e
-        Rails.logger.warn("alumni_map notification #{event.id}: #{e.class}")
-      end
-    end
+    def self.deliver = Notifications.deliver
     # Public forum fields only; callers enforce each feature's anonymity rules.
     def self.forum_user(id)
       user = id.is_a?(User) ? id : User.find_by(id: id)
@@ -194,10 +181,12 @@ module DiscourseAlumniMap
       Access.check!(current_user)
       RateLimiter.new(current_user, "alumni_map-write", 40, 1.minute).performed!
       data = params.fetch(:data, ActionController::Parameters.new).permit!.to_h
+      operation=params.require(:operation).to_s
+      prepared=Service.prepare_location(current_user,data) if operation=='save' && !Command.exists?(user_id:current_user.id,key:params[:request_id])
       result = Shared.command(current_user, params.require(:operation).to_s, data, params.require(:request_id)) do
-        Service.call(current_user, params[:operation].to_s, data)
+        Service.call(current_user, operation, data, prepared:prepared)
       end
-      Shared.deliver
+      Notifications.enqueue
       render_json_dump(result)
     end
     def upload

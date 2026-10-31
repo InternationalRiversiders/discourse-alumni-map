@@ -1,3 +1,4 @@
+import cardMasonry from "../modifiers/card-masonry";
 import Component from "@glimmer/component";
 import { tracked } from "@glimmer/tracking";
 import { action } from "@ember/object";
@@ -13,6 +14,10 @@ import AppIcon from "./alumni_map-icon";
 import MapCanvas from "./alumni-map-canvas";
 export default class extends Component {
   @tracked snapshot;
+  @tracked regionCards = [];
+  @tracked regionPagination;
+  @tracked loadingCards = false;
+  regionGeneration = 0;
   @tracked selectedRegion;
   @tracked busy = false;
   @tracked error = "";
@@ -42,15 +47,18 @@ export default class extends Component {
     this.error = "";
     this.notice = "";
     try {
-      const search = new URLSearchParams(query).toString();
-      this.snapshot = await ajax("/alumni-map/state.json?" + search);
+      const search = new URLSearchParams({ ...query, lazy_cards: "1" }).toString();
+      this.clearRegion();
+      const snapshot = await ajax("/alumni-map/state.json?" + search);
+      if (this.isDestroying || this.isDestroyed) { return; }
+      this.snapshot = snapshot;
       this.selectedRegion = null;
       window.history.replaceState({}, "", "/alumni-map?" + search);
       window.scrollTo({ top: 0, behavior: "auto" });
     } catch (e) {
-      this.error = extractError(e);
+      if (!this.isDestroying && !this.isDestroyed) { this.error = extractError(e); }
     } finally {
-      this.busy = false;
+      if (!this.isDestroying && !this.isDestroyed) { this.busy = false; }
     }
   }
   @action tab(id, e) {
@@ -70,12 +78,19 @@ export default class extends Component {
       contentType: "application/json",
       data: JSON.stringify({ operation: op, data, request_id: requestId }),
     });
-    this.snapshot = await ajax(
-      "/alumni-map/state.json?" + this.query.toString()
-    );
+    if (this.isDestroying || this.isDestroyed) { return result; }
     this.notice = result.message || "已保存";
-    if (result.query) {
-      await this.navigate(result.query);
+    try {
+      const query = new URLSearchParams(result.query || Object.fromEntries(this.query));
+      query.set("lazy_cards", "1");
+      const snapshot = await ajax("/alumni-map/state.json?" + query);
+      if (!this.isDestroying && !this.isDestroyed) {
+        this.snapshot = snapshot;
+        this.clearRegion();
+        window.history.replaceState({}, "", "/alumni-map?" + query);
+      }
+    } catch {
+      if (!this.isDestroying && !this.isDestroyed) { this.notice += "。页面暂未更新，请刷新查看，无需重复提交。"; }
     }
     return result;
   }
@@ -87,9 +102,9 @@ export default class extends Component {
     try {
       await this.execute(item.operation, item.data, crypto.randomUUID());
     } catch (e) {
-      this.error = extractError(e);
+      if (!this.isDestroying && !this.isDestroyed) { this.error = extractError(e); }
     } finally {
-      this.busy = false;
+      if (!this.isDestroying && !this.isDestroyed) { this.busy = false; }
     }
   }
   get isDetail() {
@@ -103,16 +118,40 @@ export default class extends Component {
       "about",
     ].includes(this.data.view);
   }
-  @action selectRegion(region) {
+  @action async selectRegion(region) {
     this.selectedRegion = region;
+    await this.loadRegion(1);
   }
   @action clearRegion() {
+    this.regionGeneration++;
     this.selectedRegion = null;
+    this.regionCards = [];
+    this.regionPagination = null;
+    this.loadingCards = false;
+  }
+  @action async loadRegion(page) {
+    const region = this.selectedRegion;
+    if (!region || !this.data.map?.lazy_cards) { return; }
+    const generation = ++this.regionGeneration;
+    this.loadingCards = true;
+    this.regionCards = [];
+    this.regionPagination = null;
+    this.error = "";
+    try {
+      const query = new URLSearchParams({ cards_only: "1", region_key: region.key, page, q: this.query.get("q") || "" });
+      const result = await ajax("/alumni-map/state.json?" + query);
+      if (this.isDestroying || this.isDestroyed || generation !== this.regionGeneration) { return; }
+      this.regionCards = result.cards;
+      this.regionPagination = result.pagination;
+    } catch (error) {
+      if (!this.isDestroying && !this.isDestroyed && generation === this.regionGeneration) { this.error = extractError(error); }
+    } finally {
+      if (!this.isDestroying && !this.isDestroyed && generation === this.regionGeneration) { this.loadingCards = false; }
+    }
   }
   get visibleCards() {
-    if (!this.data.map) {
-      return this.data.cards || [];
-    }
+    if (!this.data.map) { return this.data.cards || []; }
+    if (this.data.map.lazy_cards) { return this.regionCards; }
     const ids = new Set((this.selectedRegion?.ids || []).map(String));
     return (this.data.cards || []).filter((card) => ids.has(String(card.id)));
   }
@@ -126,7 +165,7 @@ export default class extends Component {
     return Boolean(this.data.forms?.length);
   }
   get showEmpty() {
-    return !this.hasForms && (this.data.map ? !this.data.cards?.length : !this.hasCards);
+    return !this.hasForms && (this.data.map ? this.data.map.profile_count === 0 : !this.hasCards);
   }
   get workspaceClass() {
     return `river-workspace ${this.isDetail ? "is-detail" : ""} ${this.hasForms ? "has-forms" : ""} ${!this.hasCards && this.hasForms ? "form-only" : ""}`;
@@ -233,6 +272,12 @@ export default class extends Component {
         <span>第 {{this.data.pagination.page}} / {{this.data.pagination.pages}} 页</span>
         {{#if this.data.pagination.next}}<button type="button" class="btn" disabled={{this.busy}} {{on "click" (fn this.navigate this.data.pagination.next)}}>下一页</button>{{/if}}
       </nav>{{/if}}
+      {{#if this.loadingCards}}<p role="status" class="river-note">正在加载校友名片…</p>{{/if}}
+      {{#if this.regionPagination}}<nav class="alumni-pagination" aria-label="地区名片分页">
+        {{#if this.regionPagination.previous}}<button type="button" class="btn" disabled={{this.loadingCards}} {{on "click" (fn this.loadRegion this.regionPagination.previous)}}>上一页</button>{{/if}}
+        <span>第 {{this.regionPagination.page}} / {{this.regionPagination.pages}} 页 · {{this.regionPagination.total}} 位校友</span>
+        {{#if this.regionPagination.next}}<button type="button" class="btn" disabled={{this.loadingCards}} {{on "click" (fn this.loadRegion this.regionPagination.next)}}>下一页</button>{{/if}}
+      </nav>{{/if}}
       <div class={{this.workspaceClass}}>
         {{#if this.hasCards}}<section
             class="river-content"
@@ -240,7 +285,7 @@ export default class extends Component {
           ><div class="river-section-heading"><h2
               >{{if this.data.map this.selectedRegion.label this.currentTitle}}</h2><span>{{#if this.data.map}}{{this.visibleCards.length}} 位校友{{else}}在不同的城市，延续同一份连接{{/if}}</span>
               {{#if this.data.map}}<button type="button" class="btn btn-flat" {{on "click" this.clearRegion}}>关闭名片</button>{{/if}}</div>
-            <div class="river-grid">{{#each
+            <div class="river-grid" {{cardMasonry ".river-card"}}>{{#each
                 this.visibleCards key="id"
                 as |card|
               }}<AppCard

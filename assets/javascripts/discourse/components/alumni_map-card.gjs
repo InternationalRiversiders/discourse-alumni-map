@@ -17,12 +17,10 @@ export default class extends Component {
     <article class="river-card" data-card-id={{@card.id}} id="alumni-profile-{{@card.id}}" tabindex="-1">
       <div class="river-card-heading">
         <div class="river-card-symbol">{{#if @card.forum_user}}<DUserAvatar @user={{@card.forum_user}} @size="medium" />{{else}}<span aria-hidden="true">{{this.initial}}</span>{{/if}}</div>
-        <div class="river-card-heading-text">{{#if @card.tag}}<span
-              class="river-tag"
-            >{{@card.tag}}</span>{{/if}}
-          <h2><ForumUser @user={{@card.forum_user}} @name={{@card.title}} @hideAvatar={{true}} /></h2>{{#if @card.subtitle}}<p
-              class="river-meta"
-            ><ForumUser @user={{@card.forum_user}} @name={{@card.subtitle}} @hideAvatar={{true}} /></p>{{/if}}
+        <div class="river-card-heading-text">
+          <h2><ForumUser @user={{@card.forum_user}} @name={{@card.title}} @hideAvatar={{true}} /></h2>
+          {{#if @card.tag}}<span class="river-tag">{{@card.tag}}</span>{{/if}}
+          {{#if @card.subtitle}}<p class="river-meta"><ForumUser @user={{@card.forum_user}} @name={{@card.subtitle}} @hideAvatar={{true}} /></p>{{/if}}
         </div>
       </div>
       {{#if @card.created_at}}<p class="river-meta">{{@card.time_label}} <time datetime={{@card.created_at}}>{{formatDateTime @card.created_at}}</time></p>{{/if}}

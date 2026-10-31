@@ -888,3 +888,28 @@
   display: flex;
   > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 }
+
+// Natural-height cards fill each column; mobile keeps the original DOM order.
+.river-alumni_map {
+  .river-grid.is-card-masonry {
+    grid-auto-rows: 1px;
+    grid-auto-flow: row;
+    row-gap: 0;
+    > * { grid-row-end: span var(--card-row-span, 1); align-self: start; }
+  }
+  .river-card { padding: 16px 18px; }
+  .river-card-heading { align-items: center; gap: 12px; margin-bottom: 12px; }
+  .river-card-heading:last-child { margin-bottom: 0; }
+  .river-card-heading h2 { margin: 0 0 3px; line-height: 1.35; }
+  .river-card-heading .river-tag { display: block; line-height: 1.5; }
+  .river-card-heading .alumni_map-user-label {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .river-card-symbol { width: 42px; height: 42px; }
+  .river-card .river-body { margin: 12px 0; padding-top: 12px; line-height: 1.65; }
+  .river-card > :last-child { margin-bottom: 0; }
+  .alumni-profile-fields { gap: .4rem; }
+  @media (max-width: 700px) {
+    .river-card { padding: 14px; }
+  }
+}

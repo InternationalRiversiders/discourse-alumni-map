@@ -15,6 +15,7 @@ module DiscourseAlumniMap
     end
     def self.state(user, query)
       Access.check!(user)
+      return region_cards(user,query) if Shared.bool(query['cards_only'])
       tabs=[['map','校友地图'],['me','我的名片']];tabs << ['admin','管理'] if Access.admin?(user)
       out=Ui.shell(user,query,tabs,empty_title:'这里还没有公开的校友名片',empty_text:'先完善自己的资料，再选择是否公开。')
       if out[:view]=='me'
@@ -41,19 +42,16 @@ module DiscourseAlumniMap
         end
         out[:note]="共 #{scope.count} 张名片。解除隐藏不会代替本人公开资料。"
       else
-        scope=Profile.where(published:true,status:'visible')
+        scope=public_profiles(query)
         q=query['q'].to_s.strip
-        scope=scope.where('nickname ILIKE :q OR city ILIKE :q OR country ILIKE :q OR province ILIKE :q OR (show_username = TRUE AND user_id IN (SELECT id FROM users WHERE username ILIKE :q))',q:"%#{ActiveRecord::Base.sanitize_sql_like(q)}%") if q.present?
+        lazy=Shared.bool(query['lazy_cards'])
+        scope=scope.select(:id,:user_id,:nickname,:country,:province,:city,:latitude,:longitude,:show_username,:updated_at) if lazy
         profiles=scope.order(updated_at: :desc,id: :desc).to_a
         usernames=User.where(id:profiles.select(&:show_username).map(&:user_id)).index_by(&:id)
         out[:filters]=[{name:'q',label:'寻找校友',value:q,placeholder:'用户名、昵称、国家或城市'}]
         out[:stats]=[{label:'公开名片',value:profiles.size},{label:'国内省份',value:profiles.select { |p| p.country=='中国' }.map(&:province).reject(&:blank?).uniq.size},{label:'国家 / 地区',value:profiles.map(&:country).reject(&:blank?).uniq.size}]
-        out[:map]={key:SiteSetting.alumni_map_amap_key,security:SiteSetting.alumni_map_amap_security_code,points:profiles.filter_map { |p| {id:p.id,lat:p.latitude.to_f,lng:p.longitude.to_f,title:usernames[p.user_id]&.username || p.nickname,city:p.city} if p.latitude && p.longitude },regions:{province:regions(profiles,'province'),city:regions(profiles,'city')}}
-        out[:cards]=profiles.map do |p|
-          d=p.details
-          account=p.show_username ? usernames[p.user_id] : nil;username=account&.username
-          Ui.card(p.id,username || p.nickname,d['bio'],tag:[p.country,p.province,p.city].reject(&:blank?).uniq.join(' · '),forum_user:account && Shared.forum_user(account),profile_url:username && "/u/#{ERB::Util.url_encode(username)}",profile_fields:DETAILS.filter_map { |key,label| {label:label,value:d[key]} if key!='bio' && d[key].present? })
-        end
+        out[:map]={profile_count:profiles.size,lazy_cards:lazy,key:SiteSetting.alumni_map_amap_key,security:SiteSetting.alumni_map_amap_security_code,points:profiles.filter_map { |p| {id:p.id,lat:p.latitude.to_f,lng:p.longitude.to_f,title:usernames[p.user_id]&.username || p.nickname,city:p.city} if p.latitude && p.longitude },regions:{province:regions(profiles,'province'),city:regions(profiles,'city')}}
+        out[:cards]=lazy ? [] : profile_cards(profiles)
         out[:note]='仅显示城市级位置。点击地区查看校友；未填写坐标的名片也可通过地区选择查看。'
         if q.present? && profiles.empty?
           out[:empty_title]='没有找到匹配的校友'
@@ -67,6 +65,30 @@ module DiscourseAlumniMap
         out[:note]='这是旧站数据的只读快照。编辑、公开设置及管理操作请在演示站测试。'
       end
       out
+    end
+    def self.public_profiles(query)
+      scope=Profile.where(published:true,status:'visible')
+      q=query['q'].to_s.strip
+      raise Error,'搜索关键词最多 100 字' if q.length>100
+      scope=scope.where('nickname ILIKE :q OR city ILIKE :q OR country ILIKE :q OR province ILIKE :q OR (show_username = TRUE AND user_id IN (SELECT id FROM users WHERE username ILIKE :q))',q:"%#{ActiveRecord::Base.sanitize_sql_like(q)}%") if q.present?
+      scope
+    end
+    def self.profile_cards(profiles)
+      usernames=User.where(id:profiles.select(&:show_username).map(&:user_id)).index_by(&:id)
+      profiles.map do |p|
+        d=p.details
+        account=p.show_username ? usernames[p.user_id] : nil;username=account&.username
+        Ui.card(p.id,username || p.nickname,d['bio'],tag:[p.country,p.province,p.city].reject(&:blank?).uniq.join(' · '),forum_user:account && Shared.forum_user(account),profile_url:username && "/u/#{ERB::Util.url_encode(username)}",profile_fields:DETAILS.filter_map { |key,label| {label:label,value:d[key]} if key!='bio' && d[key].present? })
+      end
+    end
+    def self.region_cards(user,query)
+      profiles=public_profiles(query).select(:id,:country,:province,:city,:latitude,:longitude).to_a
+      choices=regions(profiles,'province')+regions(profiles,'city')
+      region=choices.find { |row| row[:key]==query['region_key'] }
+      scope=public_profiles(query).where(id:region ? region[:ids] : [])
+      total=scope.count;pages=[(total/30.0).ceil,1].max;page=[[query['page'].to_i,1].max,pages].min
+      rows=scope.order(updated_at: :desc,id: :desc).offset((page-1)*30).limit(30).to_a
+      {cards:profile_cards(rows),pagination:{page:page,pages:pages,total:total,previous:page>1 ? page-1 : nil,next:page<pages ? page+1 : nil}}
     end
     STATE_COUNTRIES = %w[中国 美国 加拿大 澳大利亚 俄罗斯 巴西 印度 阿根廷 墨西哥 印度尼西亚].freeze
     def self.regions(profiles,level)
@@ -84,7 +106,13 @@ module DiscourseAlumniMap
         {key:Digest::SHA256.hexdigest([level,parts].to_json)[0,20],label:parts.reject(&:blank?).uniq.join(' · '),count:people.size,ids:people.map(&:id),lat:located.empty? ? nil : located.sum { |p| p.latitude.to_f }/located.size,lng:located.empty? ? nil : located.sum { |p| p.longitude.to_f }/located.size}
       end.sort_by { |region| [-region[:count],region[:label]] }
     end
-    def self.call(user,operation,data)
+    def self.prepare_location(user,data)
+      Access.check!(user)
+      raise Error,'当前为只读预览，暂不接受修改' if SiteSetting.alumni_map_read_only
+      profile=Profile.find_by(user_id:user.id) || Profile.new(user_id:user.id)
+      {version:profile.updated_at,location:resolve_location(profile,data)}
+    end
+    def self.call(user,operation,data,prepared:nil)
       Access.check!(user)
       raise Error,'这是只读快照，请到演示站测试编辑' if SiteSetting.alumni_map_read_only
       case operation
@@ -95,7 +123,8 @@ module DiscourseAlumniMap
           value=details[key]
           raise Error,'年份应为 1950 至 2100 之间的四位数字' if value.present? && (!value.match?(/\A\d{4}\z/) || !value.to_i.between?(1950,2100))
         end
-        location=resolve_location(p,data)
+        raise Error,'名片已在其他页面更新，请刷新后重试' if prepared && prepared[:version]!=p.updated_at
+        location=prepared ? prepared[:location] : resolve_location(p,data)
         p.update!(**location,nickname:Shared.text(data['nickname'],40),published:p.status!='hidden' && Shared.bool(data['published']),show_username:Shared.bool(data['show_username']),details:details)
         {message:p.city.present? && p.latitude.nil? ? '名片已保存。城市坐标暂未找到，仍可通过地区选择查看名片。' : '名片已保存，位置仅精确到城市级别'}
       when 'moderate'
