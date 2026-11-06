@@ -19,6 +19,7 @@ export default class extends Component {
       [s.whisper_enabled && u?.whisper_member, "whisper", "树洞", "leaf", "whisper"],
       [s.courses_enabled && u?.courses_member, "courses", "选课指南", "graduation-cap", "courses"],
       [s.alumni_map_enabled && u?.alumni_map_member, "alumni-map", "校友地图", "map-location-dot", "alumni-map"],
+      [s.rsc_enabled && s.rsc_games_enabled && u?.rsc_member, "rsc-games", "游戏", "dice", "rsc-games"],
       [s.rsdate_enabled && u?.rsdate_member, "rsdate", "RS Date", "heart", "rsdate"],
     ];
     return entries.filter(([visible]) => visible).map(([,name,text,icon,route]) => ({name,text,icon,route}));
